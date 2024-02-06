@@ -22,7 +22,8 @@ The VST will be implemented within the vst-rs framework: [https://github.com/Rus
 The core of the audio processing system will be a bandpass filter, or potentially mode variable filter.
 The cutoff of this filter will be controllable by an LFO module, and also an onset-detection algorithm for automatic wah-wah playing.
 We may experiment with additional post-processing steps such as compression or distortion to give a unique tone color to our plugin.
-![image](flowhchart.jpg)
+
+![plot](https://github.com/JoeCleveland/ASEFinal_WahWah/main/flowhchart.jpg)
 
 
 
