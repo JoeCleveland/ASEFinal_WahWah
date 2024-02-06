@@ -23,7 +23,27 @@ The core of the audio processing system will be a bandpass filter, or potentiall
 The cutoff of this filter will be controllable by an LFO module, and also an onset-detection algorithm for automatic wah-wah playing.
 We may experiment with additional post-processing steps such as compression or distortion to give a unique tone color to our plugin.
 
-![plot](https://github.com/JoeCleveland/ASEFinal_WahWah/main/flowhchart.jpg)
+![image](https://github.com/JoeCleveland/ASEFinal_WahWah/blob/main/flowchart.jpg?raw=true)
+
+The software will contain the following modules:
+ * Main sound processing algorithm (I.e. the filter)
+ * Sound post-processing
+ * Onset detection algorithm
+ * User interface
+ * Preset saving and loading
+ * DAW interaction (I.e. automation, clock-syncing)
+
+## Workload
+
+We will be using SCRUM methodology and organizing tasks using Notion.
+Responsibilities will be broken up into the following roles:
+
+ * Scrum master
+ * Testing leader
+ * Architecture lead
+ * Developers
+ * Interface designer
+
 
 
 
