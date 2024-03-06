@@ -1,0 +1,1 @@
+{"rustc":12152928357286724068,"features":"[\"atomic_f64\", \"default\"]","target":5987549824592885512,"profile":9665179037312312722,"path":2821513751338617117,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"release/.fingerprint/atomic_float-5434c0da5bbde6db/dep-lib-atomic_float"}}],"rustflags":[],"metadata":16148429901515335432,"config":2202906307356721367,"compile_kind":0}
