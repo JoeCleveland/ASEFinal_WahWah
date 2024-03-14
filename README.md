@@ -1,5 +1,13 @@
 # ASEFinal_WahWah
 
+## Building the VST Plugin
+
+You can find the compiled VST object at: target > bundled > WahWah.vst3
+NB: When you recompile it does not overwrite the VST, so you will need to delete it first!
+
+```shell
+cargo xtask bundle WahWah --release
+```
 ## Motivation
 This project is a VST compatible plugin emulating a Wah-Wah pedal, such as the classic Cry-Baby.
 Unlike a traditional wah-wah effect which requires constant user input, this plugin automates the control over the wah-wah effect for greater ease of use.

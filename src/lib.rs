@@ -1,9 +1,12 @@
-mod comb_filter;
+mod vibrato;
 mod ring_buffer;
+mod lfo;
+mod envelope;
 
+use envelope::Envelope;
 use nih_plug::prelude::*;
 use std::sync::Arc;
-use comb_filter::CombFilter;
+use vibrato::Vibrato;
 
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
@@ -11,7 +14,8 @@ use comb_filter::CombFilter;
 
 struct Wahwah {
     params: Arc<WahwahParams>,
-    comb_filter: CombFilter
+    vibrato: Vibrato,
+    envelope: Envelope,
 }
 
 #[derive(Params)]
@@ -24,13 +28,16 @@ struct WahwahParams {
     pub gain: FloatParam,
     #[id = "delay"]
     pub delay: FloatParam,
+    #[id = "freq"]
+    pub freq: FloatParam,
 }
 
 impl Default for Wahwah {
     fn default() -> Self {
         Self {
             params: Arc::new(WahwahParams::default()),
-            comb_filter: CombFilter::new(comb_filter::FilterType::FIR, 1.0, 44100.0, 1)
+            vibrato: Vibrato::new(4.0, 1.0, 44100),
+            envelope: Envelope::new(0.001, 0.0001, 0.3, 0.05)
         }
     }
 }
@@ -41,7 +48,12 @@ impl Default for WahwahParams {
             delay: FloatParam::new(
                 "Delay",
                 0.0,
-                FloatRange::Linear { min: (0.0001), max: (0.9) },
+                FloatRange::Linear { min: (0.001), max: (0.1) },
+            ),
+            freq: FloatParam::new(
+                "Freq",
+                0.0,
+                FloatRange::Linear { min: (0.5), max: (10.0) },
             ),
             // This gain is stored as linear gain. NIH-plug comes with useful conversion functions
             // to treat these kinds of parameters as if we were dealing with decibels. Storing this
@@ -49,23 +61,11 @@ impl Default for WahwahParams {
             gain: FloatParam::new(
                 "Gain",
                 util::db_to_gain(0.0),
-                FloatRange::Skewed {
-                    min: util::db_to_gain(-30.0),
-                    max: util::db_to_gain(30.0),
-                    // This makes the range appear as if it was linear when displaying the values as
-                    // decibels
-                    factor: FloatRange::gain_skew_factor(-30.0, 30.0),
-                },
+                FloatRange::Linear {
+                    min: (0.0),
+                    max: (1.0),
+                }
             )
-            // Because the gain parameter is stored as linear gain instead of storing the value as
-            // decibels, we need logarithmic smoothing
-            .with_smoother(SmoothingStyle::Logarithmic(50.0))
-            .with_unit(" dB")
-            // There are many predefined formatters we can use here. If the gain was stored as
-            // decibels instead of as a linear gain value, we could have also used the
-            // `.with_step_size(0.1)` function to get internal rounding.
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
         }
     }
 }
@@ -121,8 +121,7 @@ impl Plugin for Wahwah {
         // Resize buffers and perform other potentially expensive initialization operations here.
         // The `reset()` function is always called right after this function. You can remove this
         // function if you do not need it.
-        self.comb_filter.set_param(comb_filter::FilterParam::Delay, 0.1);
-        self.comb_filter.set_param(comb_filter::FilterParam::Gain, 0.5);
+        self.vibrato.set_delay(0.1);
         true
     }
 
@@ -141,11 +140,18 @@ impl Plugin for Wahwah {
             // Smoothing is optionally built into the parameters themselves
             let gain = self.params.gain.smoothed.next();
             let delay = self.params.delay.smoothed.next();
-            self.comb_filter.set_param(comb_filter::FilterParam::Gain, gain);
-            self.comb_filter.set_param(comb_filter::FilterParam::Delay, delay);
+            let freq = self.params.freq.smoothed.next();
+            self.vibrato.set_delay(delay);
+            // self.vibrato.set_freq(freq);
 
-            for sample in channel_samples {
-                self.comb_filter.process_one_sample(sample);
+            for mut sample in channel_samples {
+                let env_value = self.envelope.process_one_sample(sample);
+                // let env_value = 0.5;
+                let orig_sample = *sample;
+                self.vibrato.process_one_sample(&mut sample);
+
+                let g = gain * env_value;
+                *sample = *sample * g + orig_sample*(1.0-g);
             }
         }
 
