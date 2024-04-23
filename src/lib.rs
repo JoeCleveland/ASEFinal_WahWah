@@ -6,6 +6,7 @@ mod envelope;
 use envelope::Envelope;
 use nih_plug::prelude::*;
 use std::sync::Arc;
+use synthrs::filter::{bandpass_filter, cutoff_from_frequency};
 use vibrato::Vibrato;
 
 // This is a shortened version of the gain example with most comments removed, check out
@@ -30,6 +31,8 @@ struct WahwahParams {
     pub delay: FloatParam,
     #[id = "freq"]
     pub freq: FloatParam,
+    #[id = "onset_threshold"]
+    pub onset_threshold: FloatParam,
 }
 
 impl Default for Wahwah {
@@ -45,6 +48,7 @@ impl Default for Wahwah {
 impl Default for WahwahParams {
     fn default() -> Self {
         Self {
+            // todo: add threshold for onset detection
             delay: FloatParam::new(
                 "Delay",
                 0.0,
@@ -61,6 +65,14 @@ impl Default for WahwahParams {
             gain: FloatParam::new(
                 "Gain",
                 util::db_to_gain(0.0),
+                FloatRange::Linear {
+                    min: (0.0),
+                    max: (1.0),
+                }
+            ),
+            onset_threshold: FloatParam::new(
+                "Onset Threshold",
+                0.0,
                 FloatRange::Linear {
                     min: (0.0),
                     max: (1.0),
@@ -138,10 +150,12 @@ impl Plugin for Wahwah {
     ) -> ProcessStatus {
         for channel_samples in buffer.iter_samples() {
             // Smoothing is optionally built into the parameters themselves
+            let onset_threshold = self.params.onset_threshold.smoothed.next();
             let gain = self.params.gain.smoothed.next();
             let delay = self.params.delay.smoothed.next();
             let freq = self.params.freq.smoothed.next();
             self.vibrato.set_delay(delay);
+            self.envelope.set_threshold(onset_threshold);
             // self.vibrato.set_freq(freq);
 
             for mut sample in channel_samples {
