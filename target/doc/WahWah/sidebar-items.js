@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["GetPluginFactory","apply_fir_filter_blockwise","bandpass_fir","bundleEntry","bundleExit"],"mod":["envelope","lfo","ring_buffer","vibrato"],"static":["clap_entry"],"struct":["Wahwah","WahwahParams"]};
