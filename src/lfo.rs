@@ -17,7 +17,7 @@ impl LFO {
         };
 
         for i in 0..sample_rate {
-            lfo.buffer.push(f32::sin(i as f32 * 2.0 * std::f32::consts::PI / sample_rate as f32));
+            lfo.buffer.push(f32::sin(i as f32 * freq * 2.0 * std::f32::consts::PI / sample_rate as f32));
         }
         return lfo;
     }
@@ -31,5 +31,15 @@ impl LFO {
                 self.index -= self.sample_rate as f32;
             }
         }
+    }
+
+    pub fn set_freq(&mut self, freq: f32) {
+        if f32::abs(self.freq - freq) > 0.001 {
+            self.freq = freq;
+            self.buffer.reset();
+            for i in 0..self.sample_rate {
+                self.buffer.push(f32::sin(i as f32 * 2.0 * self.freq * std::f32::consts::PI / self.sample_rate as f32));
+            }
+        } 
     }
 }

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use nih_plug::prelude::*;
-use sdr::FIR;
 
 use envelope::Envelope;
 use vibrato::Vibrato;
@@ -45,6 +44,8 @@ struct WahwahParams {
     pub use_onset_detection: BoolParam,
     #[id = "lfo_freq"]
     pub lfo_freq: FloatParam,
+    #[id = "lfo_intensity"]
+    pub lfo_intensity: FloatParam,
     #[id = "base_low_filter"]
     pub base_low_filter: FloatParam,
     #[id = "base_high_filter"]
@@ -113,15 +114,23 @@ impl Default for WahwahParams {
                 4.0,
                 FloatRange::Linear {
                     min: (0.0),
-                    max: (20.0),
+                    max: (100.0),
                 },
+            ),
+            lfo_intensity: FloatParam::new(
+            "LFO Intensity",
+         100.0,
+           FloatRange::Linear {
+                    min: (0.0),
+                    max: (4000.0)
+                }
             ),
             base_low_filter: FloatParam::new(
                 "Bandpass Low Frequency",
                 100.0,
                 FloatRange::Linear {
                     min: (0.0),
-                    max: (20000.0),
+                    max: (9600.0),
                 },
             ),
             base_high_filter: FloatParam::new(
@@ -129,7 +138,7 @@ impl Default for WahwahParams {
                 3000.0,
                 FloatRange::Linear {
                     min: (0.0),
-                    max: (20000.0),
+                    max: (9600.0),
                 },
             ),
         }
@@ -217,11 +226,12 @@ impl Plugin for Wahwah {
         let use_onset_detection = self.params.use_onset_detection.value();
 
         let lfo_freq = self.params.lfo_freq.smoothed.next();
+        let lfo_intensity = self.params.lfo_intensity.smoothed.next();
         let base_f_low = self.params.base_low_filter.smoothed.next();
         let base_f_high = self.params.base_high_filter.smoothed.next();
 
         self.envelope = Envelope::new(attack_rate, decay_rate, onset_threshold, reset_threshold);
-        self.lfo = LFO::new(lfo_freq, self.sample_rate as usize);
+        self.lfo.set_freq(lfo_freq);
 
         let num_taps = 101;
         let sample_rate = self.sample_rate;
@@ -231,8 +241,8 @@ impl Plugin for Wahwah {
 
         let mut channel_index = 0;
         for channel_samples in block_samples{
-            let mod_f_low = base_f_low + (lfo_values[channel_index] * (base_f_high - base_f_low));
-            let mod_f_high = base_f_high + (lfo_values[channel_index] * (base_f_high - base_f_low));
+            let mod_f_low = base_f_low + (lfo_values[channel_index] * lfo_intensity);
+            let mod_f_high = base_f_high + (lfo_values[channel_index] * lfo_intensity);
             let taps = bandpass_fir(num_taps, mod_f_low as f64, mod_f_high as f64, sample_rate);
             let filtered_block = apply_fir_filter_blockwise(&channel_samples, &taps, &mut self.previous_samples_list[channel_index]);
 
