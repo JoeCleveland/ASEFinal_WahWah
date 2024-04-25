@@ -230,7 +230,7 @@ impl Plugin for Wahwah {
         let base_f_low = self.params.base_low_filter.smoothed.next();
         let base_f_high = self.params.base_high_filter.smoothed.next();
 
-        self.envelope = Envelope::new(attack_rate, decay_rate, onset_threshold, reset_threshold);
+        self.envelope.set_params(attack_rate, decay_rate, onset_threshold, reset_threshold);
         self.lfo.set_freq(lfo_freq);
 
         let num_taps = 101;
@@ -241,21 +241,19 @@ impl Plugin for Wahwah {
 
         let mut channel_index = 0;
         for channel_samples in block_samples{
-            let mod_f_low = base_f_low + (lfo_values[channel_index] * lfo_intensity);
-            let mod_f_high = base_f_high + (lfo_values[channel_index] * lfo_intensity);
+            let mut env_value = 0.0;
+            if use_onset_detection {
+                let mean_sample: f32 = (*channel_samples).iter().sum::<f32>() / (*channel_samples).len() as f32;
+                env_value = self.envelope.process_one_sample(&mean_sample) * 500.0;
+            }
+
+            let mod_f_low = base_f_low + (lfo_values[channel_index] * (lfo_intensity + env_value));
+            let mod_f_high = base_f_high + (lfo_values[channel_index] * (lfo_intensity + env_value));
             let taps = bandpass_fir(num_taps, mod_f_low as f64, mod_f_high as f64, sample_rate);
             let filtered_block = apply_fir_filter_blockwise(&channel_samples, &taps, &mut self.previous_samples_list[channel_index]);
 
             for (sample, &processed) in channel_samples.iter_mut().zip(filtered_block.iter()) {
-                let env_value = self.envelope.process_one_sample(sample);
-                let orig_sample = *sample;
-
-                if use_onset_detection{
-                    let g = gain * env_value;
-                    *sample = processed * g + orig_sample*(1.0-g);
-                }else {
-                    *sample = processed * gain;
-                }
+                *sample = processed * gain;
             }
             channel_index += 1;
         }

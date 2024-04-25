@@ -54,8 +54,11 @@ impl Envelope {
         return self.curr_value;
     }
 
-    pub fn set_threshold(&mut self, threshold: f32){
-        self.onset_threshold = threshold
+    pub fn set_params(&mut self, attack_rate:f32, decay_rate: f32, onset_threshold: f32, reset_threshold: f32){
+        self.attack_rate = attack_rate;
+        self.decay_rate = decay_rate;
+        self.onset_threshold = onset_threshold;
+        self.reset_threshold = reset_threshold;
     }
 
 }
