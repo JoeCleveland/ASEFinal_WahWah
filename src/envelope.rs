@@ -1,5 +1,4 @@
 
-
 enum EnvelopeState {
     WAITING,
     ATTACK,
@@ -15,6 +14,11 @@ pub struct Envelope {
     reset_threshold: f32,
 }
 
+/// Attack-decay envelope
+/// Sits in the WAITING state until amplitude of the process function's input exceeds the onset_threshold,
+/// Then proceeds to run through the ATTACK and DECAY stages of envelope and returns to WAITING
+/// 
+/// 
 impl Envelope {
     pub fn new(attack_rate: f32, decay_rate: f32, onset_threshold: f32, reset_threshold: f32) -> Self {
         return Envelope {
@@ -27,6 +31,7 @@ impl Envelope {
         }
     }
 
+    /// Return next value of envelope given current sample
     pub fn process_one_sample(&mut self, sample: &f32) -> f32 {
         if matches!(self.state, EnvelopeState::WAITING) {
             if *sample > self.onset_threshold {
@@ -54,6 +59,7 @@ impl Envelope {
         return self.curr_value;
     }
 
+    /// Update all parameters of the envlope, can be called each sample
     pub fn set_params(&mut self, attack_rate:f32, decay_rate: f32, onset_threshold: f32, reset_threshold: f32){
         self.attack_rate = attack_rate;
         self.decay_rate = decay_rate;
