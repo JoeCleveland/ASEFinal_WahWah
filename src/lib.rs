@@ -71,7 +71,7 @@ impl Default for Wahwah {
 impl Default for WahwahParams {
     fn default() -> Self {
         Self {
-            editor_state: EguiState::from_size(480, 480),
+            editor_state: EguiState::from_size(480, 540),
             // This gain is stored as linear gain. NIH-plug comes with useful conversion functions
             // to treat these kinds of parameters as if we were dealing with decibels. Storing this
             // as decibels is easier to work with, but requires a conversion for every sample.
@@ -240,6 +240,9 @@ impl Plugin for Wahwah {
                     ui.with_layout(egui::Layout::top_down(egui::Align::Center).with_cross_align(egui::Align::Center), |ui| {
                         ui.label("Envelope");
                     });
+                    ui.label("Onset Detection");
+                    ui.add(widgets::ParamSlider::for_param(&params.use_onset_detection, setter));
+
                     ui.label("Attack Rate");
                     ui.add(widgets::ParamSlider::for_param(&params.attack_rate, setter));
 
