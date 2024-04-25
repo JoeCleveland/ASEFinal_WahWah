@@ -86,12 +86,12 @@ impl Default for WahwahParams {
             attack_rate: FloatParam::new(
                 "Envelope Attack Rate",
                 0.001,
-                FloatRange::Linear { min: (0.001), max: (0.1) },
+                FloatRange::Linear { min: (0.0001), max: (0.1) },
             ),
             decay_rate: FloatParam::new(
                 "Envelope Decay Rate",
-                0.5,
-                FloatRange::Linear { min: (0.5), max: (10.0) },
+                0.0005,
+                FloatRange::Linear { min: (0.0001), max: (0.01) },
             ),
             onset_threshold: FloatParam::new(
                 "Onset Threshold",
@@ -251,7 +251,7 @@ impl Plugin for Wahwah {
 
                     ui.label("Reset Threshold");
                     ui.add(widgets::ParamSlider::for_param(&params.reset_threshold, setter));
-                    
+
                     
                     // ui.label("Onset Detection");
                     // ui.add(widgets::ParamSlider::for_param(&params.use_onset_detection, setter));
