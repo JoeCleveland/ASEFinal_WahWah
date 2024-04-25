@@ -4,6 +4,7 @@ use nih_plug::prelude::*;
 
 use envelope::Envelope;
 use vibrato::Vibrato;
+use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
 
 use crate::lfo::LFO;
 
@@ -26,6 +27,8 @@ struct Wahwah {
 
 #[derive(Params)]
 struct WahwahParams {
+    #[persist = "editor-state"]
+    editor_state: Arc<EguiState>,
     /// The parameter's ID is used to identify the parameter in the wrappred plugin API. As long as
     /// these IDs remain constant, you can rename and reorder these fields as you wish. The
     /// parameters are exposed to the host in the same order they were defined. In this case, this
@@ -68,6 +71,7 @@ impl Default for Wahwah {
 impl Default for WahwahParams {
     fn default() -> Self {
         Self {
+            editor_state: EguiState::from_size(400, 480),
             // This gain is stored as linear gain. NIH-plug comes with useful conversion functions
             // to treat these kinds of parameters as if we were dealing with decibels. Storing this
             // as decibels is easier to work with, but requires a conversion for every sample.
@@ -86,7 +90,7 @@ impl Default for WahwahParams {
             ),
             decay_rate: FloatParam::new(
                 "Envelope Decay Rate",
-                0.0001,
+                0.5,
                 FloatRange::Linear { min: (0.5), max: (10.0) },
             ),
             onset_threshold: FloatParam::new(
@@ -210,6 +214,74 @@ impl Plugin for Wahwah {
     fn reset(&mut self) {
         // Reset buffers and envelopes here. This can be called from the audio thread and may not
         // allocate. You can remove this function if you do not need it.
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        let params = self.params.clone();
+        create_egui_editor(
+            self.params.editor_state.clone(),
+            (),
+            |_, _| {},
+            move |egui_ctx, setter, _state| {
+                egui::CentralPanel::default().show(egui_ctx, |ui| {
+                    // Adapted from https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain_gui_egui/src/lib.rs
+                    // NOTE: See `plugins/diopser/src/editor.rs` for an example using the generic UI widget
+
+                    // This is a fancy widget that can get all the information it needs to properly
+                    // display and modify the parameter from the parametr itself
+                    // It's not yet fully implemented, as the text is missing.
+                    ui.label("Gain");
+                    ui.add(widgets::ParamSlider::for_param(&params.gain, setter));
+
+                    ui.label("Envelope Attack Rate");
+                    ui.add(widgets::ParamSlider::for_param(&params.attack_rate, setter));
+
+                    ui.label("Envelope Decay Rate");
+                    ui.add(widgets::ParamSlider::for_param(&params.decay_rate, setter));
+                    
+                    ui.label("Onset Threshold");
+                    ui.add(widgets::ParamSlider::for_param(&params.onset_threshold, setter));
+
+                    ui.label("Reset Threshold");
+                    ui.add(widgets::ParamSlider::for_param(&params.reset_threshold, setter));
+
+                    ui.label("Onset Detection");
+                    ui.add(widgets::ParamSlider::for_param(&params.use_onset_detection, setter));
+
+                    ui.label("LFO Frequency");
+                    ui.add(widgets::ParamSlider::for_param(&params.lfo_freq, setter));
+
+                    ui.label("LFO Intensity");
+                    ui.add(widgets::ParamSlider::for_param(&params.lfo_intensity, setter));
+
+                    ui.label("Bandpass Low Frequency");
+                    ui.add(widgets::ParamSlider::for_param(&params.base_low_filter, setter));
+
+                    ui.label("Bandpass High Frequency");
+                    ui.add(widgets::ParamSlider::for_param(&params.base_high_filter, setter));
+
+                    // This is a simple naieve version of a parameter slider that's not aware of how
+                    // the parameters work
+                    ui.add(
+                        egui::widgets::Slider::from_get_set(-30.0..=30.0, |new_value| {
+                            match new_value {
+                                Some(new_value_db) => {
+                                    let new_value = util::gain_to_db(new_value_db as f32);
+
+                                    setter.begin_set_parameter(&params.gain);
+                                    setter.set_parameter(&params.gain, new_value);
+                                    setter.end_set_parameter(&params.gain);
+
+                                    new_value_db
+                                }
+                                None => util::gain_to_db(params.gain.value()) as f64,
+                            }
+                        })
+                        .suffix(" dB"),
+                    );
+                });
+            },
+        )
     }
 
     fn process(
