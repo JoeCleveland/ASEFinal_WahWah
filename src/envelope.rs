@@ -1,4 +1,3 @@
-
 enum EnvelopeState {
     WAITING,
     ATTACK,
@@ -17,8 +16,6 @@ pub struct Envelope {
 /// Attack-decay envelope
 /// Sits in the WAITING state until amplitude of the process function's input exceeds the onset_threshold,
 /// Then proceeds to run through the ATTACK and DECAY stages of envelope and returns to WAITING
-/// 
-/// 
 impl Envelope {
     pub fn new(attack_rate: f32, decay_rate: f32, onset_threshold: f32, reset_threshold: f32) -> Self {
         return Envelope {
