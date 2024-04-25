@@ -53,4 +53,9 @@ impl Envelope {
         }
         return self.curr_value;
     }
+
+    pub fn set_threshold(&mut self, threshold: f32){
+        self.onset_threshold = threshold
+    }
+
 }

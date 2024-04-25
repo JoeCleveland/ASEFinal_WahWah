@@ -1,12 +1,17 @@
+use std::sync::Arc;
+
+use nih_plug::prelude::*;
+use sdr::FIR;
+
+use envelope::Envelope;
+use vibrato::Vibrato;
+
+use crate::lfo::LFO;
+
 mod vibrato;
 mod ring_buffer;
 mod lfo;
 mod envelope;
-
-use envelope::Envelope;
-use nih_plug::prelude::*;
-use std::sync::Arc;
-use vibrato::Vibrato;
 
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
@@ -14,8 +19,10 @@ use vibrato::Vibrato;
 
 struct Wahwah {
     params: Arc<WahwahParams>,
-    vibrato: Vibrato,
     envelope: Envelope,
+    lfo: LFO,
+    previous_samples_list: Vec<Vec<f32>>,  // Buffer for storing the last N-1 samples between process calls
+    sample_rate: f64
 }
 
 #[derive(Params)]
@@ -26,18 +33,33 @@ struct WahwahParams {
     /// gain parameter is stored as linear gain while the values are displayed in decibels.
     #[id = "gain"]
     pub gain: FloatParam,
-    #[id = "delay"]
-    pub delay: FloatParam,
-    #[id = "freq"]
-    pub freq: FloatParam,
+    #[id = "attack_rate"]
+    pub attack_rate: FloatParam,
+    #[id = "decay_rate"]
+    pub decay_rate: FloatParam,
+    #[id = "onset_threshold"]
+    pub onset_threshold: FloatParam,
+    #[id = "reset_threshold"]
+    pub reset_threshold: FloatParam,
+    #[id = "use_onset_detection"]
+    pub use_onset_detection: BoolParam,
+    #[id = "lfo_freq"]
+    pub lfo_freq: FloatParam,
+    #[id = "base_low_filter"]
+    pub base_low_filter: FloatParam,
+    #[id = "base_high_filter"]
+    pub base_high_filter: FloatParam,
+
 }
 
 impl Default for Wahwah {
     fn default() -> Self {
         Self {
             params: Arc::new(WahwahParams::default()),
-            vibrato: Vibrato::new(4.0, 1.0, 44100),
-            envelope: Envelope::new(0.001, 0.0001, 0.3, 0.05)
+            envelope: Envelope::new(0.001, 0.0001, 0.0, 0.05),
+            lfo: LFO::new(4.0, 44100),
+            previous_samples_list: Vec::new(),  // Initially empty
+            sample_rate: 44100.0,
         }
     }
 }
@@ -45,16 +67,6 @@ impl Default for Wahwah {
 impl Default for WahwahParams {
     fn default() -> Self {
         Self {
-            delay: FloatParam::new(
-                "Delay",
-                0.0,
-                FloatRange::Linear { min: (0.001), max: (0.1) },
-            ),
-            freq: FloatParam::new(
-                "Freq",
-                0.0,
-                FloatRange::Linear { min: (0.5), max: (10.0) },
-            ),
             // This gain is stored as linear gain. NIH-plug comes with useful conversion functions
             // to treat these kinds of parameters as if we were dealing with decibels. Storing this
             // as decibels is easier to work with, but requires a conversion for every sample.
@@ -64,8 +76,62 @@ impl Default for WahwahParams {
                 FloatRange::Linear {
                     min: (0.0),
                     max: (1.0),
-                }
-            )
+                },
+            ),
+            attack_rate: FloatParam::new(
+                "Envelope Attack Rate",
+                0.001,
+                FloatRange::Linear { min: (0.001), max: (0.1) },
+            ),
+            decay_rate: FloatParam::new(
+                "Envelope Decay Rate",
+                0.0001,
+                FloatRange::Linear { min: (0.5), max: (10.0) },
+            ),
+            onset_threshold: FloatParam::new(
+                "Onset Threshold",
+                0.15,
+                FloatRange::Linear {
+                    min: (0.0),
+                    max: (1.0),
+                },
+            ),
+            reset_threshold: FloatParam::new(
+                "Reset Threshold",
+                0.05,
+                FloatRange::Linear {
+                    min: (0.0),
+                    max: (1.0),
+                },
+            ),
+            use_onset_detection: BoolParam::new(
+                "Use Onset Detection",
+                false,
+            ),
+            lfo_freq: FloatParam::new(
+                "LFO Frequency",
+                4.0,
+                FloatRange::Linear {
+                    min: (0.0),
+                    max: (20.0),
+                },
+            ),
+            base_low_filter: FloatParam::new(
+                "Bandpass Low Frequency",
+                100.0,
+                FloatRange::Linear {
+                    min: (0.0),
+                    max: (20000.0),
+                },
+            ),
+            base_high_filter: FloatParam::new(
+                "Bandpass High Frequency",
+                3000.0,
+                FloatRange::Linear {
+                    min: (0.0),
+                    max: (20000.0),
+                },
+            ),
         }
     }
 }
@@ -121,7 +187,14 @@ impl Plugin for Wahwah {
         // Resize buffers and perform other potentially expensive initialization operations here.
         // The `reset()` function is always called right after this function. You can remove this
         // function if you do not need it.
-        self.vibrato.set_delay(0.1);
+        let num_channels = _audio_io_layout.main_input_channels;
+        self.sample_rate = _buffer_config.sample_rate as f64;
+        let num_taps = 101;  // n   ber of taps in your FIR filter
+        for _ in 0..num_channels.unwrap().into(){
+            let mut new_vec = Vec::new();
+            new_vec.resize(num_taps - 1, 0.0);
+            self.previous_samples_list.push(new_vec);
+        }
         true
     }
 
@@ -136,27 +209,105 @@ impl Plugin for Wahwah {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        for channel_samples in buffer.iter_samples() {
-            // Smoothing is optionally built into the parameters themselves
-            let gain = self.params.gain.smoothed.next();
-            let delay = self.params.delay.smoothed.next();
-            let freq = self.params.freq.smoothed.next();
-            self.vibrato.set_delay(delay);
-            // self.vibrato.set_freq(freq);
+        let gain = self.params.gain.smoothed.next();
+        let attack_rate = self.params.attack_rate.smoothed.next();
+        let decay_rate = self.params.decay_rate.smoothed.next();
+        let onset_threshold = self.params.onset_threshold.smoothed.next();
+        let reset_threshold = self.params.reset_threshold.smoothed.next();
+        let use_onset_detection = self.params.use_onset_detection.value();
 
-            for mut sample in channel_samples {
+        let lfo_freq = self.params.lfo_freq.smoothed.next();
+        let base_f_low = self.params.base_low_filter.smoothed.next();
+        let base_f_high = self.params.base_high_filter.smoothed.next();
+
+        self.envelope = Envelope::new(attack_rate, decay_rate, onset_threshold, reset_threshold);
+        self.lfo = LFO::new(lfo_freq, self.sample_rate as usize);
+
+        let num_taps = 101;
+        let sample_rate = self.sample_rate;
+        let block_samples = buffer.as_slice();
+        let mut lfo_values = vec![0.0; block_samples.len()];
+        self.lfo.get_block(&mut lfo_values);
+
+        let mut channel_index = 0;
+        for channel_samples in block_samples{
+            let mod_f_low = base_f_low + (lfo_values[channel_index] * (base_f_high - base_f_low));
+            let mod_f_high = base_f_high + (lfo_values[channel_index] * (base_f_high - base_f_low));
+            let taps = bandpass_fir(num_taps, mod_f_low as f64, mod_f_high as f64, sample_rate);
+            let filtered_block = apply_fir_filter_blockwise(&channel_samples, &taps, &mut self.previous_samples_list[channel_index]);
+
+            for (sample, &processed) in channel_samples.iter_mut().zip(filtered_block.iter()) {
                 let env_value = self.envelope.process_one_sample(sample);
-                // let env_value = 0.5;
                 let orig_sample = *sample;
-                self.vibrato.process_one_sample(&mut sample);
 
-                let g = gain * env_value;
-                *sample = *sample * g + orig_sample*(1.0-g);
+                if use_onset_detection{
+                    let g = gain * env_value;
+                    *sample = processed * g + orig_sample*(1.0-g);
+                }else {
+                    *sample = processed * gain;
+                }
             }
+            channel_index += 1;
         }
-
         ProcessStatus::Normal
     }
+}
+
+fn bandpass_fir(num_taps: usize, f_low: f64, f_high: f64, sample_rate: f64) -> Vec<f64> {
+    let mut taps = vec![0.0; num_taps];
+    let center = num_taps / 2;
+    let fl = f_low / sample_rate;
+    let fh = f_high / sample_rate;
+    for i in 0..num_taps {
+        let n = i as f64 - center as f64;
+
+        // Avoid division by zero in the sinc function calculation
+        if n == 0.0 {
+            taps[i] = 2.0 * (fh - fl);
+        } else {
+            taps[i] = (2.0 * fh * (f64::sin(2.0 * std::f64::consts::PI * fh * n) / (2.0 * std::f64::consts::PI * fh * n))) -
+                (2.0 * fl * (f64::sin(2.0 * std::f64::consts::PI * fl * n) / (2.0 * std::f64::consts::PI * fl * n)));
+        }
+
+        // Apply a Hamming window to the sinc function
+        taps[i] *= 0.54 - 0.46 * f64::cos(2.0 * std::f64::consts::PI * i as f64 / (num_taps - 1) as f64);
+    }
+
+    taps
+}
+
+fn apply_fir_filter_blockwise(input: &[f32], taps: &Vec<f64>, previous_samples: &mut Vec<f32>) -> Vec<f32> {
+    let num_taps = taps.len();
+    let num_samples = input.len();
+    let mut output = vec![0.0; num_samples];
+
+    // Ensure the buffer has enough samples to cover the FIR filter requirement
+    previous_samples.resize(num_taps - 1, 0.0);
+
+    // Combine previous and current samples
+    let combined_samples = previous_samples.iter().cloned().chain(input.iter().cloned()).collect::<Vec<f32>>();
+
+    for i in 0..num_samples {
+        let mut acc = 0.0;
+        for j in 0..num_taps {
+            if i + num_taps <= combined_samples.len() {
+                acc += combined_samples[i + j] * taps[j] as f32;
+            }
+        }
+        output[i] = acc;
+    }
+
+    // Update previous_samples for the next block
+    if input.len() >= num_taps {
+        previous_samples.clear();
+        previous_samples.extend_from_slice(&input[input.len() - num_taps + 1..]);
+    } else {
+        // Maintain sliding window of samples
+        previous_samples.drain(0..input.len());
+        previous_samples.extend_from_slice(input);
+    }
+
+    output
 }
 
 impl ClapPlugin for Wahwah {
