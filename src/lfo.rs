@@ -43,3 +43,15 @@ impl LFO {
         } 
     }
 }
+
+#[test]
+fn test_lfo() {
+    let mut lfo = LFO::new(1.0, 628);
+    let mut output = vec![0f32; 628];
+    lfo.get_block(output.as_mut_slice());
+
+    assert!(f32::abs(output[0] - 0.0) < 0.00001);
+    assert!(f32::abs(output[157] - 1.0) < 0.00001); // PI / 2
+    assert!(f32::abs(output[314] - 0.0) < 0.00001); // PI
+    assert!(f32::abs(output[471] + 1.0) < 0.00001); // 3*PI / 2
+}
