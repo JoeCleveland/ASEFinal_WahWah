@@ -68,13 +68,8 @@
 <a href="#68" id="68">68</a>
 <a href="#69" id="69">69</a>
 <a href="#70" id="70">70</a>
-<a href="#71" id="71">71</a>
-<a href="#72" id="72">72</a>
-<a href="#73" id="73">73</a>
 </pre></div><pre class="rust"><code>
-
-<span class="doccomment">/// Keeps track of the envelope stages.
-</span><span class="kw">enum </span>EnvelopeState {
+<span class="kw">enum </span>EnvelopeState {
     WAITING,
     ATTACK,
     DECAY,
@@ -89,13 +84,11 @@
     reset_threshold: f32,
 }
 
-<span class="doccomment">/// Implementation of attack-decay envelope which is triggered by onset detection.
+<span class="doccomment">/// Attack-decay envelope
+/// Sits in the WAITING state until amplitude of the process function&#39;s input exceeds the onset_threshold,
+/// Then proceeds to run through the ATTACK and DECAY stages of envelope and returns to WAITING
 /// 
-/// The state is an enum with four values:
-/// In WAITING the envelope sits at zero waiting for an input signal to exceed the onset threshold
-/// In ATTACK the envelope rises by attack_rate until reaching 1
-/// In DECAY the envelope lowers by decay_rate until reaching 0
-/// In FINAL the envelope waits until the input signal passes below the reset_threshold to return to WAITING
+/// 
 </span><span class="kw">impl </span>Envelope {
     <span class="kw">pub fn </span>new(attack_rate: f32, decay_rate: f32, onset_threshold: f32, reset_threshold: f32) -&gt; <span class="self">Self </span>{
         <span class="kw">return </span>Envelope {
@@ -108,7 +101,8 @@
         }
     }
 
-    <span class="kw">pub fn </span>process_one_sample(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sample: <span class="kw-2">&amp;</span>f32) -&gt; f32 {
+    <span class="doccomment">/// Return next value of envelope given current sample
+    </span><span class="kw">pub fn </span>process_one_sample(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sample: <span class="kw-2">&amp;</span>f32) -&gt; f32 {
         <span class="kw">if </span><span class="macro">matches!</span>(<span class="self">self</span>.state, EnvelopeState::WAITING) {
             <span class="kw">if </span><span class="kw-2">*</span>sample &gt; <span class="self">self</span>.onset_threshold {
                 <span class="self">self</span>.state = EnvelopeState::ATTACK;
@@ -135,7 +129,7 @@
         <span class="kw">return </span><span class="self">self</span>.curr_value;
     }
 
-    <span class="doccomment">/// Update each of the evenlope parameters, can be called per block or once per sample as needed.
+    <span class="doccomment">/// Update all parameters of the envlope, can be called each sample
     </span><span class="kw">pub fn </span>set_params(<span class="kw-2">&amp;mut </span><span class="self">self</span>, attack_rate:f32, decay_rate: f32, onset_threshold: f32, reset_threshold: f32){
         <span class="self">self</span>.attack_rate = attack_rate;
         <span class="self">self</span>.decay_rate = decay_rate;

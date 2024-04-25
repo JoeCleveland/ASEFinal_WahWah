@@ -451,6 +451,9 @@
 <a href="#451" id="451">451</a>
 <a href="#452" id="452">452</a>
 <a href="#453" id="453">453</a>
+<a href="#454" id="454">454</a>
+<a href="#455" id="455">455</a>
+<a href="#456" id="456">456</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>nih_plug::prelude::<span class="kw-2">*</span>;
@@ -466,7 +469,7 @@
 <span class="kw">mod </span>lfo;
 <span class="kw">mod </span>envelope;
 
-<span class="doccomment">/// Main struct for the Wah Wah plugin
+<span class="doccomment">/// Main struct of the Wah Wah plugin
 </span><span class="kw">struct </span>Wahwah {
     params: Arc&lt;WahwahParams&gt;,
     envelope: Envelope,
@@ -521,7 +524,7 @@
 <span class="kw">impl </span>Default <span class="kw">for </span>WahwahParams {
     <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
-            editor_state: EguiState::from_size(<span class="number">480</span>, <span class="number">480</span>),
+            editor_state: EguiState::from_size(<span class="number">480</span>, <span class="number">540</span>),
             <span class="comment">// This gain is stored as linear gain. NIH-plug comes with useful conversion functions
             // to treat these kinds of parameters as if we were dealing with decibels. Storing this
             // as decibels is easier to work with, but requires a conversion for every sample.
@@ -543,7 +546,7 @@
                 <span class="number">0.0005</span>,
                 FloatRange::Linear { min: (<span class="number">0.0001</span>), max: (<span class="number">0.01</span>) },
             ),
-            <span class="doccomment">/// Controls the amplitude at which the envelope is started
+            <span class="doccomment">/// Amplitude of triggering the envelope
             </span>onset_threshold: FloatParam::new(
                 <span class="string">&quot;Onset Threshold&quot;</span>,
                 <span class="number">0.15</span>,
@@ -552,8 +555,7 @@
                     max: (<span class="number">1.0</span>),
                 },
             ),
-            <span class="doccomment">/// Controls the amplitude at which the envelope can be reset, and therefore triggered again
-            </span>reset_threshold: FloatParam::new(
+            reset_threshold: FloatParam::new(
                 <span class="string">&quot;Reset Threshold&quot;</span>,
                 <span class="number">0.05</span>,
                 FloatRange::Linear {
@@ -581,7 +583,7 @@
                     max: (<span class="number">4000.0</span>)
                 }
             ),
-            <span class="doccomment">/// Lower bound of the band-pass filter in hertz
+            <span class="doccomment">/// Lower bound of the band-pass filter
             </span>base_low_filter: FloatParam::new(
                 <span class="string">&quot;Bandpass Low Frequency&quot;</span>,
                 <span class="number">100.0</span>,
@@ -590,7 +592,7 @@
                     max: (<span class="number">9600.0</span>),
                 },
             ),
-            <span class="doccomment">/// Upper bound of the high-pass filter in hertz
+            <span class="doccomment">/// Upper bound of the high-pass filter
             </span>base_high_filter: FloatParam::new(
                 <span class="string">&quot;Bandpass High Frequency&quot;</span>,
                 <span class="number">3000.0</span>,
@@ -645,7 +647,8 @@
         <span class="self">self</span>.params.clone()
     }
 
-    <span class="kw">fn </span>initialize(
+    <span class="doccomment">/// Generates appropriate sized 2D vector for previous_samples_list to be used by the FIR filter
+    </span><span class="kw">fn </span>initialize(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         _audio_io_layout: <span class="kw-2">&amp;</span>AudioIOLayout,
         _buffer_config: <span class="kw-2">&amp;</span>BufferConfig,
@@ -670,7 +673,7 @@
         // allocate. You can remove this function if you do not need it.
     </span>}
 
-    <span class="doccomment">/// Handles the rendering of the egui based user-interface
+    <span class="doccomment">/// Main rendering function of the egui editor
     </span><span class="kw">fn </span>editor(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _async_executor: AsyncExecutor&lt;<span class="self">Self</span>&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;Box&lt;<span class="kw">dyn </span>Editor&gt;&gt; {
         <span class="kw">let </span>params = <span class="self">self</span>.params.clone();
         create_egui_editor(
@@ -695,6 +698,9 @@
                     ui.with_layout(egui::Layout::top_down(egui::Align::Center).with_cross_align(egui::Align::Center), |ui| {
                         ui.label(<span class="string">&quot;Envelope&quot;</span>);
                     });
+                    ui.label(<span class="string">&quot;Onset Detection&quot;</span>);
+                    ui.add(widgets::ParamSlider::for_param(<span class="kw-2">&amp;</span>params.use_onset_detection, setter));
+
                     ui.label(<span class="string">&quot;Attack Rate&quot;</span>);
                     ui.add(widgets::ParamSlider::for_param(<span class="kw-2">&amp;</span>params.attack_rate, setter));
 
@@ -772,10 +778,9 @@
         )
     }
 
-    <span class="doccomment">/// Callback function which is called once per block.
-    /// All parameters are first retrieved.
-    /// The LFO and Envelope values are generated for each sample which modifies the filter bounds.
-    /// Then the appropriate FIR filter is generated and processed blockwise
+    <span class="doccomment">/// Processes each block of incoming audio and writes output in-place
+    /// Each parameter is first stored,
+    /// Then the FIR filter kernel is generated, and the audio is filtered blockwise.
     </span><span class="kw">fn </span>process(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         buffer: <span class="kw-2">&amp;mut </span>Buffer,
@@ -825,7 +830,8 @@
     }
 }
 
-<span class="doccomment">/// Returns a convolution kernel for an FIR bandpass filter of specified frequency range
+<span class="doccomment">/// Generates a convolution kernel of size ```num_taps``` for an FIR bandpass filter
+/// within the frequency band between ```f_low``` and ```f_high```
 </span><span class="kw">fn </span>bandpass_fir(num_taps: usize, f_low: f64, f_high: f64, sample_rate: f64) -&gt; Vec&lt;f64&gt; {
     <span class="kw">let </span><span class="kw-2">mut </span>taps = <span class="macro">vec!</span>[<span class="number">0.0</span>; num_taps];
     <span class="kw">let </span>center = num_taps / <span class="number">2</span>;
@@ -849,7 +855,7 @@
     taps
 }
 
-<span class="doccomment">/// Applies the FIR filter kernel generated by ```bandpass_fir```
+<span class="doccomment">/// Uses the FIR filter kernel generated by ```bandpass_fir``` and convolves the input signal
 </span><span class="kw">fn </span>apply_fir_filter_blockwise(input: <span class="kw-2">&amp;</span>[f32], taps: <span class="kw-2">&amp;</span>Vec&lt;f64&gt;, previous_samples: <span class="kw-2">&amp;mut </span>Vec&lt;f32&gt;) -&gt; Vec&lt;f32&gt; {
     <span class="kw">let </span>num_taps = taps.len();
     <span class="kw">let </span>num_samples = input.len();
