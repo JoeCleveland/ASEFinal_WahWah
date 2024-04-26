@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq, Eq)]
 enum EnvelopeState {
     WAITING,
     ATTACK,
@@ -62,6 +63,54 @@ impl Envelope {
         self.decay_rate = decay_rate;
         self.onset_threshold = onset_threshold;
         self.reset_threshold = reset_threshold;
+    }
+
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_envelope() {
+        let env = Envelope::new(0.1, 0.05, 0.5, 0.2);
+        assert_eq!(env.state, EnvelopeState::WAITING);
+        assert_eq!(env.curr_value, 0.0);
+        assert_eq!(env.attack_rate, 0.1);
+        assert_eq!(env.decay_rate, 0.05);
+        assert_eq!(env.onset_threshold, 0.5);
+        assert_eq!(env.reset_threshold, 0.2);
+    }
+
+    #[test]
+    fn test_process_one_sample_attack_to_decay() {
+        let mut env = Envelope::new(0.05, 0.05, 0.5, 0.2);
+        env.state = EnvelopeState::ATTACK;
+        env.curr_value = 0.95;
+        let sample = 0.6;  // Still above threshold, but should now switch to decay
+        let output = env.process_one_sample(&sample);
+        assert_eq!(env.state, EnvelopeState::DECAY);
+        assert_eq!(output, 1.0);  // Should cap at 1.0
+    }
+
+    #[test]
+    fn test_process_one_sample_decay_to_waiting() {
+        let mut env = Envelope::new(0.1, 0.1, 0.5, 0.2);
+        env.state = EnvelopeState::DECAY;
+        env.curr_value = 0.1;
+        let sample = 0.6;  // Still above the reset_threshold, should not affect state
+        let output = env.process_one_sample(&sample);
+        assert_eq!(env.state, EnvelopeState::WAITING);
+        assert_eq!(output, 0.0);  // Should decay to zero and return to waiting
+    }
+
+    #[test]
+    fn test_set_params() {
+        let mut env = Envelope::new(0.1, 0.05, 0.5, 0.2);
+        env.set_params(0.2, 0.1, 0.6, 0.3);
+        assert_eq!(env.attack_rate, 0.2);
+        assert_eq!(env.decay_rate, 0.1);
+        assert_eq!(env.onset_threshold, 0.6);
+        assert_eq!(env.reset_threshold, 0.3);
     }
 
 }
