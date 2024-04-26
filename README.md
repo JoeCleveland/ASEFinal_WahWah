@@ -12,7 +12,7 @@ This plugin is primarily aimed at guitarists but is versatile enough for live or
 - **Automated Pedal Control**: Aligns the wah-wah effect with the onsets of musical phrases, eliminating the need for manual pedal adjustments.
 - **Versatile Sound Manipulation**: Users can tailor the sound with various adjustable parameters to fit their musical style and preference.
 
-### [Demo Video](https://youtu.be/6olo_rhbeC8)
+### [Demo Video](https://youtu.be/vtl9eNs0sSE)
 
 ### Parameters
 | Parameter                | Description                | Range         | Default Value |
